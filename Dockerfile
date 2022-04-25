@@ -6,4 +6,5 @@ RUN apt update && \
     python3.8 get-pip.py && \
     git clone https://github.com/PIC4SeR/AcT.git && \
     cd AcT && \
-    python3.8 -m pip install -r requirements.txt
+    python3.8 -m pip install -r requirements.txt && \
+    python3.8 -m pip install keras==2.6.0
