@@ -50,7 +50,15 @@ class DisorganisedThinkingYesNo:
         vocabulary = list(set(answers))
         self.asr.setVocabulary(vocabulary, False)
 
-        self.tts.say("Could you please answer the following questions with yes or no responses?")
+        self.tts.say("Could you please answer the following questions with")
+        time.sleep(0.25)
+        self.tts.say("yes")
+        time.sleep(0.25)
+        self.tts.say("or")
+        time.sleep(0.25)
+        self.tts.say("no")
+        time.sleep(0.25)
+        self.tts.say("responses?")
         time.sleep(0.5)
         self.asr.pause(0)
 
@@ -65,7 +73,7 @@ class DisorganisedThinkingYesNo:
                 # word, score = mem.getData("WordRecognized")
 
                 print(word, score)
-                if not word == "" and score > 0.5:
+                if not word == "" and score > 0.4:
                     break
                 time.sleep(0.1)
             

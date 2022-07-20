@@ -26,24 +26,17 @@ class DisorganisedThinkingFingers:
         # videoClient = camProxy.subscribe("python_client", resolution, colorSpace, fps) # Pepper
         videoClient = self.camProxy.subscribeCamera("python_client",0, resolution, colorSpace, fps) # NAO 6
 
-        self.tts.say("Please hold up 2 fingers")
+        self.tts.say("I need you to make gestures with your hands")
+        self.tts.say("At one arms length away, please hold up 2 fingers where I can see them")
         results = []
         while len(results) < 10:
-            # Get a camera image.
             # image[6] contains the image data passed as an array of ASCII chars.
-            t0 = time.time()
             naoImage = self.camProxy.getImageRemote(videoClient)
-            t1 = time.time()
-            print("acquisition delay ", t1 - t0)
-
-            # Get the image size and pixel array.
-            imageWidth = naoImage[0]
-            imageHeight = naoImage[1]
             array = naoImage[6]
 
             self.socket.send(str(array))
             if not self.socket.poll(250):
-                break
+                continue
             message = self.socket.recv()
 
             if message == "":

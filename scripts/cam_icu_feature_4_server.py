@@ -60,7 +60,7 @@ with mp_hands.Hands(
         pinky = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST], hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP], hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
 
         # construct result string
-        crop = 0.5
+        crop = 0.1
         crop_side = crop/2.0
         wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
         if wrist.x > crop_side and wrist.x < 1 - crop_side and wrist.y > crop_side and wrist.y < 1 - crop_side:

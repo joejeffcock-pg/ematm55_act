@@ -9,15 +9,38 @@ class Inattention:
         self.tts = session.service("ALTextToSpeech")
         self.mem = session.service("ALMemory")
         self.ap = session.service("ALAudioPlayer")
+        self.posture = session.service("ALRobotPosture")
+    
+    def say_introduction(self):
+        self.tts.say("I am going to read you a series of 10 letters.")
+        self.tts.say("Whenever you hear the letter")
+        time.sleep(0.25)
+        self.tts.say("A.")
+        time.sleep(0.25)
+        self.tts.say("indicate by touching the top of my hand.")
+        self.tts.say("I will make this sound:")
+        time.sleep(0.25)
+        self.ap.playSine(500, 50, 0, 0.1)
+        time.sleep(0.25)
+        self.tts.say("once you touch my hand.")
+        self.posture.goToPosture("StandZero", 0.5)
+
+        self.tts.say("Remember to only touch my hand when you hear the letter. A.")
+        self.tts.say("Let's begin in")
+        self.tts.say("3")
+        time.sleep(0.5)
+        self.tts.say("2")
+        time.sleep(0.5)
+        self.tts.say("1")
+        time.sleep(0.5)
     
     def interview(self, letters):
         letters = letters.lower()
         letters = [letter for letter in letters]
         timeout = 2.0
         responses = []
-        self.tts.say("I am going to read you a series of 10 letters.")
-        self.tts.say("Whenever you hear the letter A, indicate by touching the top of my hand.")
-        self.tts.say("I will make a beep sound once you touch my hand.")
+
+        self.say_introduction()
 
         for letter in letters:
             print(letter)
@@ -43,6 +66,8 @@ class Inattention:
         for i, response in enumerate(responses):
             if (letters[i] == 'a' and not response) or (not letters[i] == 'a' and response):
                 errors +=1
+
+        self.posture.goToPosture("Stand", 0.5)
 
         print("errors: {}".format(errors))
         if errors > 2:
