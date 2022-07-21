@@ -22,6 +22,9 @@ if __name__ == "__main__":
     socket = context.socket(zmq.REQ)
     socket.connect("tcp://127.0.0.1:5560")
 
+    scores = {}
+    thresholds = {"inattention":2, "disorganysed thinking":1} # disorganised misspelt for tts
+
     feature_2 = Inattention(session)
     feature_4_1 = DisorganisedThinkingYesNo(session, auto_start=False)
     feature_4_2 = DisorganisedThinkingFingers(session, socket)
@@ -37,14 +40,14 @@ if __name__ == "__main__":
     time.sleep(1.0)
 
     tts.say("First,")
-    feature_2.interview(LETTERS)
+    scores["inattention"] = feature_2.interview(LETTERS)
     time.sleep(1.0)
 
     posture.goToPosture("Stand", 1.0)
     tts.say("Now,")
     try:
         feature_4_1.start()
-        feature_4_1.interview(QUESTIONS, ANSWERS)
+        scores["dt1"] = feature_4_1.interview(QUESTIONS, ANSWERS)
     except RuntimeError as e:
         print(e)
     feature_4_1.stop()
@@ -52,4 +55,14 @@ if __name__ == "__main__":
 
     posture.goToPosture("Stand", 1.0)
     tts.say("Finally,")
-    feature_4_2.interview()
+    scores["dt2"] = feature_4_2.interview()
+
+    print(scores)
+    scores["disorganysed thinking"] = scores.pop("dt1") + scores.pop("dt2")
+    for feature in scores:
+        score = scores[feature]
+        tts.say("you scored {} errors on the {} test. The {} feature is".format(score, feature, feature))
+        if scores <= thresholds[feature]:
+            tts.say("not")
+        tts.say("prehsent")
+        time.sleep(0.5)

@@ -68,15 +68,7 @@ class Inattention:
                 errors +=1
 
         self.posture.goToPosture("Stand", 0.5)
-
-        print("errors: {}".format(errors))
-        if errors > 2:
-            self.tts.say("oh no, {} errors. looks like you are delirious".format(errors))
-        else:
-            self.tts.say("{} errors, you are fine".format(errors))
-        
         return errors
-
 
 if __name__ == "__main__":
     ip = "169.254.165.104"

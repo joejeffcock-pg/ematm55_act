@@ -29,13 +29,8 @@ class DisorganisedThinkingYesNo:
     
     def stop(self):
         self.asr.unsubscribe("Test_ASR")
-
-    def interview(self, questions, answers):
-        self.asr.pause(1)
-        self.asr.setLanguage("English")
-        vocabulary = list(set(answers))
-        self.asr.setVocabulary(vocabulary, False)
-
+    
+    def say_introduction(self):
         self.tts.say("Could you please answer the following questions with")
         time.sleep(0.25)
         self.tts.say("yes")
@@ -46,6 +41,14 @@ class DisorganisedThinkingYesNo:
         time.sleep(0.25)
         self.tts.say("responses?")
         time.sleep(0.5)
+
+    def interview(self, questions, answers):
+        self.asr.pause(1)
+        self.asr.setLanguage("English")
+        vocabulary = list(set(answers))
+        self.asr.setVocabulary(vocabulary, False)
+
+        self.say_introduction()
 
         failures = 0
         for i, question in enumerate(questions):
@@ -67,14 +70,6 @@ class DisorganisedThinkingYesNo:
             if not (word == ANSWERS[i] and score < 0.4):
                 failures += 1
             time.sleep(0.5)
-
-        self.tts.say("{} errors".format(failures))
-        if failures > 1:
-            self.tts.say("oh no, you have disorganised thinking")
-        else:
-            self.tts.say("oh no, you have organised thinking")
-
-        self.asr.pause(1)
 
         return failures
 
