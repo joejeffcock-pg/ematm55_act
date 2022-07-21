@@ -4,6 +4,7 @@ import numpy as np
 import zmq
 import time
 from collections import Counter
+import argparse
 
 class DisorganisedThinkingFingers:
     def __init__(self, session, socket):
@@ -48,9 +49,12 @@ class DisorganisedThinkingFingers:
         return result == 2
 
 if __name__ == "__main__":
-    ip = "169.254.45.131"
-    port = 9559
-    app = qi.Application(["CAMICU", "--qi-url=tcp://{}:9559".format(ip, port)])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip", dest="ip", action="store", type=str, default="pepper.local")
+    parser.add_argument("--port", dest="port", action="store", type=int, default=9559)
+    args = parser.parse_args()
+
+    app = qi.Application(["CAMICU", "--qi-url=tcp://{}:{}".format(args.ip, args.port)])
     app.start()
     session = app.session
 

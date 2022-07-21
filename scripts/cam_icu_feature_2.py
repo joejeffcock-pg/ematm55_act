@@ -1,6 +1,7 @@
 from naoqi import ALProxy
 import qi
 import time
+import argparse
 
 LETTERS = "SAVEAHAART"
 
@@ -71,9 +72,12 @@ class Inattention:
         return errors
 
 if __name__ == "__main__":
-    ip = "169.254.165.104"
-    port = 9559
-    app = qi.Application(["CAMICU", "--qi-url=tcp://{}:9559".format(ip, port)])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip", dest="ip", action="store", type=str, default="pepper.local")
+    parser.add_argument("--port", dest="port", action="store", type=int, default=9559)
+    args = parser.parse_args()
+
+    app = qi.Application(["CAMICU", "--qi-url=tcp://{}:{}".format(args.ip, args.port)])
     app.start()
     session = app.session
 

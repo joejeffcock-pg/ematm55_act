@@ -12,8 +12,6 @@ if __name__ == "__main__":
     parser.add_argument("--port", dest="port", action="store", type=int, default=9559)
     args = parser.parse_args()
 
-    ip = "169.254.179.1"
-    port = 9559
     app = qi.Application(["CAMICU", "--qi-url=tcp://{}:{}".format(args.ip, args.port)])
     app.start()
     session = app.session
