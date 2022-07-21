@@ -29,20 +29,6 @@ class DisorganisedThinkingYesNo:
     
     def stop(self):
         self.asr.unsubscribe("Test_ASR")
-    
-    def beep_on(self, high=750, low=500):
-        self.ap.playSine(low, 25, 0, 0.05)
-        time.sleep(0.1)
-        self.ap.playSine(low, 25, 0, 0.05)
-        time.sleep(0.1)
-        self.ap.playSine(high, 25, 0, 0.1)
-        time.sleep(0.15)
-
-    def beep_off(self, high=750, low=500):
-        self.ap.playSine(high, 25, 0, 0.1)
-        time.sleep(0.15)
-        self.ap.playSine(low, 25, 0, 0.1)
-        time.sleep(0.15)
 
     def interview(self, questions, answers):
         self.asr.pause(1)
@@ -60,27 +46,26 @@ class DisorganisedThinkingYesNo:
         time.sleep(0.25)
         self.tts.say("responses?")
         time.sleep(0.5)
-        self.asr.pause(0)
 
         failures = 0
         for i, question in enumerate(questions):
+            self.asr.pause(1)
             self.tts.say(question)
             time.sleep(0.5)
-            self.beep_on()
-            start_time = time.time()
-            while 1:
-                word, score = self.mem.getDataOnChange("WordRecognized", 0)
-                # word, score = mem.getData("WordRecognized")
 
+            self.mem.insertData("WordRecognized", ("", 0.0))
+            self.asr.pause(0)
+
+            start_time = time.time()
+            while time.time() - start_time < 5.0:
+                word, score = self.mem.getData("WordRecognized")
                 print(word, score)
-                if not word == "" and score > 0.4:
+                if not word == "" and score >= 0.4:
                     break
                 time.sleep(0.1)
             
-            if not word == ANSWERS[i]:
+            if not (word == ANSWERS[i] and score < 0.4):
                 failures += 1
-            
-            self.beep_off()
             time.sleep(0.5)
 
         self.tts.say("{} errors".format(failures))

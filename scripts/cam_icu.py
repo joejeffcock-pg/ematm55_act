@@ -1,12 +1,20 @@
+import qi
+import zmq
+import time
 from cam_icu_feature_2 import *
 from cam_icu_feature_4_1 import *
 from cam_icu_feature_4_2 import *
-import time
+import argparse
 
 if __name__ == "__main__":
-    ip = "169.254.156.167"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ip", dest="ip", action="store", type=str, default="pepper.local")
+    parser.add_argument("--port", dest="port", action="store", type=int, default=9559)
+    args = parser.parse_args()
+
+    ip = "169.254.179.1"
     port = 9559
-    app = qi.Application(["CAMICU", "--qi-url=tcp://{}:9559".format(ip, port)])
+    app = qi.Application(["CAMICU", "--qi-url=tcp://{}:{}".format(args.ip, args.port)])
     app.start()
     session = app.session
 
