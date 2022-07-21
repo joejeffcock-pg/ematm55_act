@@ -60,7 +60,7 @@ if __name__ == "__main__":
     for feature in scores:
         score = scores[feature]
         tts.say("you scored {} errors on the {} test. The {} feature is".format(score, feature, feature))
-        if scores <= thresholds[feature]:
+        if score <= thresholds[feature]:
             tts.say("not")
         tts.say("prehsent")
         time.sleep(0.5)

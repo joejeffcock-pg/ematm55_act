@@ -45,7 +45,9 @@ with mp_hands.Hands(
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     result_str = None
     if results.multi_hand_landmarks:
-      for hand_landmarks in results.multi_hand_landmarks:
+      for i, hand_landmarks in enumerate(results.multi_hand_landmarks):
+        handedness = results.multi_handedness[i].classification[0].label
+
         mp_drawing.draw_landmarks(
             image,
             hand_landmarks,
@@ -64,7 +66,7 @@ with mp_hands.Hands(
         crop_side = crop/2.0
         wrist = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
         if wrist.x > crop_side and wrist.x < 1 - crop_side and wrist.y > crop_side and wrist.y < 1 - crop_side:
-          result_str = '{}{}{}{}{}'.format(is_up(*thumb), is_up(*index), is_up(*middle), is_up(*ring), is_up(*pinky))
+          result_str = '{}{}{}{}{} {}'.format(is_up(*thumb), is_up(*index), is_up(*middle), is_up(*ring), is_up(*pinky), handedness)
           print(result_str)
           break
         

@@ -6,28 +6,37 @@ import time
 from collections import Counter
 import argparse
 
+HANDEDNESS_MAP = {"Left": 0, "Right": 1}
+
 class DisorganisedThinkingFingers:
-    def __init__(self, session, socket):
+    def __init__(self, session, socket, auto_start=True):
         self.camProxy = session.service("ALVideoDevice")
         self.tts = session.service("ALTextToSpeech")
         self.ap = session.service("ALAudioPlayer")
         self.socket = socket
+        if auto_start:
+            self.start()
+    
+    def start(self):
+        resolution = 2    # VGA
+        colorSpace = 11   # RGB
+        fps = 5
+        self.videoClient = self.camProxy.subscribeCamera("python_client",0, resolution, colorSpace, fps)
+    
+    def stop(self):
+        self.camProxy.unsubscribe(self.videoClient)
     
     def say_introduction(self):
         self.tts.say("I need you to make gestures with your hands")
         self.tts.say("At one arms length away, please hold up 2 fingers where I can see them")
     
-    def interview(self):
-        resolution = 2    # VGA
-        colorSpace = 11   # RGB
-        fps = 5
-        videoClient = self.camProxy.subscribeCamera("python_client",0, resolution, colorSpace, fps)
-
-        self.say_introduction()
-        results = []
-        while len(results) < 10:
+    def detect_gesture(self):
+        counts = []
+        labels = []
+        start_time = time.time()
+        while len(counts) < 10 and time.time() - start_time < 10.0:
             # image[6] contains the image data passed as an array of ASCII chars.
-            naoImage = self.camProxy.getImageRemote(videoClient)
+            naoImage = self.camProxy.getImageRemote(self.videoClient)
             array = naoImage[6]
 
             self.socket.send(str(array))
@@ -36,17 +45,37 @@ class DisorganisedThinkingFingers:
             
             message = self.socket.recv()
             if message == "":
-                results = []
+                counts = []
+                labels = []
             else:
-                results.append(np.sum([int(v) for v in message]))
+                fingers, label = message.split()
+                counts.append(np.sum([int(v) for v in fingers]))
+                labels.append(label)
                 self.ap.playSine(500, 20, 0, 0.1)
                 time.sleep(0.1)
         
-        self.camProxy.unsubscribe(videoClient)
+        if len(labels) == 10:
+            count = Counter(counts).most_common(1)[0][0]
+            label = Counter(labels).most_common(1)[0][0]
+            return count, HANDEDNESS_MAP[label]
+        else:
+            return -1, 0
+    
+    def interview(self):
+        self.say_introduction()
 
-        counter = Counter(results)
-        result = counter.most_common(1)[0][0]
-        return result == 2
+        results = []
+        results.append(self.detect_gesture())
+        if not results[0][0] == -1:
+            self.tts.say("Okay. Now do the same thing with the other hand")
+            time.sleep(0.5)
+            results.append(self.detect_gesture())
+
+        print(results)
+        results = np.array(results)
+        result = (results[:,0] == 2).all() and (np.sum(results[:,1]) == 1)
+        result = not result
+        return result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -62,5 +91,11 @@ if __name__ == "__main__":
     socket = context.socket(zmq.REQ)
     socket.connect("tcp://127.0.0.1:5560")
 
-    feature_4_2 = DisorganisedThinkingFingers(session, socket)
-    feature_4_2.interview()
+    try:
+        feature_4_2 = DisorganisedThinkingFingers(session, socket)
+        result = feature_4_2.interview()
+    except:
+        pass
+    feature_4_2.stop()
+    print(result)
+
