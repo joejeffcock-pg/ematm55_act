@@ -54,6 +54,7 @@ if __name__ == "__main__":
     posture.goToPosture("Stand", 1.0)
     tts.say("Finally,")
     scores["dt2"] = feature_4_2.interview()
+    feature_4_2.stop()
 
     print(scores)
     scores["disorganysed thinking"] = scores.pop("dt1") + scores.pop("dt2")

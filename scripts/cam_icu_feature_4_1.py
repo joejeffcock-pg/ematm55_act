@@ -68,7 +68,7 @@ class DisorganisedThinkingYesNo:
                     break
                 time.sleep(0.1)
             
-            if not (word == ANSWERS[i] and score < 0.4):
+            if not (word == ANSWERS[i] and score >= 0.4):
                 failures += 1
             time.sleep(0.5)
 
