@@ -2,6 +2,7 @@ import os
 import numpy as np
 import cv2
 import pyopenpose as op
+from collections import defaultdict
 
 INPUTS_PATH = "/root/inputs"
 
@@ -10,25 +11,36 @@ def compute_keypoints(frame, op_wrapper):
     datum.cvInputData = frame
     op_wrapper.emplaceAndPop(op.VectorDatum([datum]))
 
-    cv2.imshow("OpenPose 1.7.0 - Tutorial Python API", datum.cvOutputData)
-    key = cv2.waitKey(15)
+    cv2.imshow("OpenPose", datum.cvOutputData)
+    cv2.waitKey(15)
     return datum
 
-dirs = {}
+sources = defaultdict(list)
+labels_text = set()
 
 print("searching the following directories for .mp4 files:")
-for class_name in os.listdir(INPUTS_PATH):
-    dir_path = os.path.join(INPUTS_PATH, class_name)
+for dir_name in os.listdir(INPUTS_PATH):
+    dir_path = os.path.join(INPUTS_PATH, dir_name)
 
     if os.path.isdir(dir_path):
         print(dir_path)
 
         for file_name in os.listdir(dir_path):
+            file_path = os.path.join(dir_path, file_name)
             if file_name.endswith(".mp4"):
-                dirs[class_name] = dir_path
+                label_text = file_name[:-4]
+                labels_text.add(label_text)
+                sources[dir_name].append((file_path, label_text))
+
+labels_text = dict(zip(labels_text, range(len(labels_text))))
 
 print("\nthe following classes were found:")
-print(dirs)
+print(labels_text)
+print("\nThe following data sources were found:")
+for name in sources:
+    for file_path, label_text in sources[name]:
+        print("name: {} file_path: {:8} label_text: {}".format(name, label_text, file_path))
+print()
 
 # openpose wrapper
 params = {"model_folder": "/root/openpose/models"}
@@ -36,41 +48,57 @@ op_wrapper = op.WrapperPython()
 op_wrapper.configure(params)
 op_wrapper.start()
 
-kwargs = {}
-count = 0
+for name in sources:
+    X = []
+    y = []
+    
+    for file_path, label_text in sources[name]:
+        cap = cv2.VideoCapture(file_path)
+        label = labels_text[label_text]
 
-for class_index, class_name in enumerate(dirs):
-    dir_path = dirs[class_name]
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-    for file_name in os.listdir(dir_path):
-        if file_name.endswith(".mp4"):
-            file_path = os.path.join(dir_path, file_name)
-            cap = cv2.VideoCapture(file_path)
+            # most of my data is portrait, so I'm rotating the image here
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-            X = []
-            y = []
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
+            datum = compute_keypoints(frame, op_wrapper)
+            if datum.poseKeypoints is not None:
+                best_score = 0.0
+                best_pose = datum.poseKeypoints[0]
 
-                datum = compute_keypoints(frame, op_wrapper)
+                # keep the best pose
+                for poseKeypoints in datum.poseKeypoints:
+                    avg_score = np.sum(poseKeypoints[:,2])
+                    if avg_score >= best_score:
+                        best_score = avg_score
+                        best_pose = poseKeypoints
 
-                if datum.poseKeypoints is not None:
-                    X.append(datum.poseKeypoints[0])
-                    y.append(class_index)
-                
-                if len(X) % 300 == 0:
-                    print("video: {} video_time: {:.2f}s frame_no: {} X_shape: {}".format(count, len(X)/30.0, len(X), np.stack(X, axis=0).shape))
+                X.append(best_pose)
+            else:
+                X.append(np.zeros((25,3)))
             
-            cap.release()
+            y.append(label)
+            
+            if len(X) % 300 == 0:
+                print("video: {} video_time: {:.2f}s frame_no: {} X_shape: {}".format(file_path, len(X)/30.0, len(X), np.stack(X, axis=0).shape))
+        
+        cap.release()
 
-            kwargs["X_{}".format(count)] = np.array(X)
-            kwargs["y_{}".format(count)] = np.array(y, dtype=np.int32)
-            count += 1
+    X = np.array(X)
+    y = np.array(y, dtype=np.int32)
+    print(X.shape)
+    print(y.shape)
 
-np.savez_compressed("/root/outputs/dataset.npz", **kwargs)
+    np.savez_compressed("/root/outputs/{}.npz".format(name), X=X, y=y)
 
-dataset = np.load("/root/outputs/dataset.npz")
-for key in dataset:
-    print(key, dataset[key].shape)
+for name in sources:
+    for file_path, label_text in sources[name]:
+        npz_path = "/root/outputs/{}.npz".format(name)
+        print(npz_path)
+        dataset = np.load(npz_path)
+        for key in dataset:
+            print(key, dataset[key].shape)
+        print()
