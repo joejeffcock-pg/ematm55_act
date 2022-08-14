@@ -14,6 +14,7 @@ class DisorganisedThinkingFingers:
         self.tts = session.service("ALTextToSpeech")
         self.ap = session.service("ALAudioPlayer")
         self.socket = socket
+        self.tablet = session.service("ALTabletService")
         if auto_start:
             self.start()
     
@@ -28,7 +29,11 @@ class DisorganisedThinkingFingers:
     
     def say_introduction(self):
         self.tts.say("I need you to make gestures with your hands")
-        self.tts.say("At one arms length away, please hold up 2 fingers where I can see them")
+        self.tts.say("At one arms length away, hold up")
+        # self.tablet.showImage("https://joejeffcock-pg.github.io/ematm55_act/images/two_fingers.png")
+        self.tablet.showImage("http://198.18.0.1/apps/images_folder_for_joe-5e9343/two_fingers.png")
+        self.tts.say("this")
+        self.tts.say("many fingers where I can see them")
     
     def detect_gesture(self):
         counts = []
@@ -63,9 +68,10 @@ class DisorganisedThinkingFingers:
     
     def interview(self):
         self.say_introduction()
-
         results = []
         results.append(self.detect_gesture())
+        self.tablet.hideImage()
+        time.sleep(0.5)
         if not results[0][0] == -1:
             self.tts.say("Okay. Now do the same thing with the other hand")
             time.sleep(0.5)
@@ -74,8 +80,8 @@ class DisorganisedThinkingFingers:
         print(results)
         results = np.array(results)
         result = (results[:,0] == 2).all() and (np.sum(results[:,1]) == 1)
-        result = not result
-        return result
+        errors = int(not result)
+        return errors
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -93,9 +99,8 @@ if __name__ == "__main__":
 
     try:
         feature_4_2 = DisorganisedThinkingFingers(session, socket)
-        result = feature_4_2.interview()
+        errors = feature_4_2.interview()
+        print(errors)
     except:
         pass
     feature_4_2.stop()
-    print(result)
-
