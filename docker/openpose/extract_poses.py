@@ -49,10 +49,12 @@ op_wrapper.configure(params)
 op_wrapper.start()
 
 for name in sources:
-    X = []
-    y = []
-    
+    kwargs = {}
+
     for file_path, label_text in sources[name]:
+        X = []
+        y = []
+
         cap = cv2.VideoCapture(file_path)
         label = labels_text[label_text]
 
@@ -87,18 +89,15 @@ for name in sources:
         
         cap.release()
 
-    X = np.array(X)
-    y = np.array(y, dtype=np.int32)
-    print(X.shape)
-    print(y.shape)
+        kwargs["X{}".format(label)] = np.array(X)
+        kwargs["y{}".format(label)] = np.array(y, dtype=np.int32)
 
-    np.savez_compressed("/root/outputs/{}.npz".format(name), X=X, y=y)
+    np.savez_compressed("/root/outputs/{}.npz".format(name), **kwargs)
 
 for name in sources:
-    for file_path, label_text in sources[name]:
-        npz_path = "/root/outputs/{}.npz".format(name)
-        print(npz_path)
-        dataset = np.load(npz_path)
-        for key in dataset:
-            print(key, dataset[key].shape)
-        print()
+    npz_path = "/root/outputs/{}.npz".format(name)
+    print(npz_path)
+    dataset = np.load(npz_path)
+    for key in dataset:
+        print(key, dataset[key].shape)
+    print()
