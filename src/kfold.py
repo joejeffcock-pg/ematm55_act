@@ -34,30 +34,18 @@ def load_mpose(dataset, split, verbose=False, data=None, frames=30):
     
     return dataset.get_data()
 
-#TODO this function can be way way smaller
-def preprocess_data(X_train, y_train, X_val, y_val, X_test, y_test):
-    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-    ds_train = ds_train.map(lambda x,y : one_hot(x,y,20), 
-                            num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_train = ds_train.cache()
-    # ds_train = ds_train.map(random_flip, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    # ds_train = ds_train.map(random_noise, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_train = ds_train.shuffle(X_train.shape[0])
-    ds_train = ds_train.batch(512)
-    ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
-
-    ds_val = tf.data.Dataset.from_tensor_slices((X_val, y_val))
-    ds_val = ds_val.map(lambda x,y : one_hot(x,y,20), num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_val = ds_val.cache()
-    ds_val = ds_val.batch(512)
-    ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
-
-    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test))
-    ds_test = ds_test.map(lambda x,y : one_hot(x,y,20), num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_test = ds_test.cache()
-    ds_test = ds_test.batch(512)
-    ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
-    return ds_train, ds_val, ds_test
+def preprocess_data(X, y, augment=False, shuffle=False):
+    ds = tf.data.Dataset.from_tensor_slices((X, y))
+    ds = ds.map(lambda x,y : one_hot(x,y,20), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    ds = ds.cache()
+    if augment:
+        ds = ds.map(random_flip, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        ds = ds.map(random_noise, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    if shuffle:
+        ds = ds.shuffle(X.shape[0])
+    ds = ds.batch(512)
+    ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
+    return ds
 
 def build_act(
     # transformer params
@@ -147,7 +135,9 @@ if __name__ == "__main__":
                                                         test_size=0.1,
                                                         shuffle=True)
         
-        ds_train, ds_val, ds_test = preprocess_data(X_train, y_train, X_val, y_val, X_test, y_test)
+        ds_train = preprocess_data(X_train, y_train)
+        ds_val = preprocess_data(X_val, y_val)
+        ds_test = preprocess_data(X_test, y_test)
 
         # mpose hyperparams
         epochs = 350
@@ -184,32 +174,5 @@ if __name__ == "__main__":
         text = f"Accuracy Test: {accuracy_test} <> Balanced Accuracy: {balanced_accuracy}\n"
         print(text)
 
-        # # qualitative results
-        # import cv2
-        # import time
-        # video_writer = cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 30, (240, 320))
-        # X_test = np.load("/home/jeff/school/msc/fyp/ematm55_act/docker/openpose/outputs_thermal/X_test.npy")
-        # y_test = np.load("/home/jeff/school/msc/fyp/ematm55_act/docker/openpose/outputs_thermal/y_test.npy")
-        # labels = {0:"alert", 1:"sedated", 2:"agitated"}
-
-        # pairs = [1, 8, 1, 2, 1, 5, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 9, 10, 10, 11, 8, 12, 12, 13, 13, 14, 1, 0, 0, 15, 15, 17, 0, 16, 16, 18, 14, 19, 19, 20, 14, 21, 11, 22, 22, 23, 11, 24]
-        # for i, data in enumerate(X_test):
-        #     for j, keypoints in enumerate(data):
-        #         frame = np.zeros((320,240,3), dtype=np.uint8)
-        #         for k in range(0, len(pairs)-1, 2):
-        #             p1 = pairs[k]
-        #             p2 = pairs[k+1]
-        #             if keypoints[p1][2] > 0.0 and keypoints[p2][2] > 0.0:
-        #                 start = [int(v) for v in keypoints[p1][0:2]]
-        #                 end = [int(v) for v in keypoints[p2][0:2]]
-        #                 cv2.line(frame,start,end,(255,255,255),2)
-                
-        #         cv2.putText(frame, "label: {} prediction: {} ({:.3f})".format(labels[y_test[i]], labels[y_pred[i]], y_scores[i]), (0,25), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255,255,255), 1)
-        #         cv2.imshow("frame", frame)
-        #         cv2.waitKey(1)
-        #         # time.sleep(0.03)
-        #         video_writer.write(frame)
-        # video_writer.release()
-
-        np.save("results/frameskip/y_test_{}.npy".format(fold), y_test)
-        np.save("results/frameskip/y_pred_{}.npy".format(fold), y_pred)
+        # np.save("results/frameskip/y_test_{}.npy".format(fold), y_test)
+        # np.save("results/frameskip/y_pred_{}.npy".format(fold), y_pred)
