@@ -92,14 +92,14 @@ def act_micro(frames=30):
     return build_act(n_heads, n_layers, dropout, mlp_head_size, frames)
 
 def n_sized_chunks(ary, n):
-    splits = [ary[i:i+n] for i in range(0, ary.shape[0], n)]
+    splits = [ary[i:i+n] for i in range(0, ary.shape[0]-n)]
     if not len(splits[-1]) == n:
         splits = splits[:-1]
     return splits
 
 def stack_data(X, y, frames=30):
-    X = [n_sized_chunks(array, frames) for X_subset in X for array in X_subset]
-    y = [n_sized_chunks(array, frames) for y_subset in y for array in y_subset]
+    X = [n_sized_chunks(array[::30], frames) for X_subset in X for array in X_subset]
+    y = [n_sized_chunks(array[::30], frames) for y_subset in y for array in y_subset]
     y = [np.unique(chunk) for chunks in y for chunk in chunks]
     
     X = np.vstack(X)
@@ -144,7 +144,7 @@ if __name__ == "__main__":
 
         X_train, y_train, X_test, y_test = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
-                                                        test_size=0.2,
+                                                        test_size=0.1,
                                                         shuffle=True)
         
         ds_train, ds_val, ds_test = preprocess_data(X_train, y_train, X_val, y_val, X_test, y_test)
@@ -166,11 +166,11 @@ if __name__ == "__main__":
         # training
         history = model.fit(
             ds_train,
-            epochs=epochs,
+            epochs=50,
             initial_epoch=0,
             validation_data=ds_val,
             # callbacks=[checkpointer],
-            verbose=0
+            verbose=1
         )
 
         # compute metrics
@@ -211,5 +211,5 @@ if __name__ == "__main__":
         #         video_writer.write(frame)
         # video_writer.release()
 
-        np.save("ukras/y_test_{}.npy".format(fold), y_test)
-        np.save("ukras/y_pred_{}.npy".format(fold), y_pred)
+        np.save("results/frameskip/y_test_{}.npy".format(fold), y_test)
+        np.save("results/frameskip/y_pred_{}.npy".format(fold), y_pred)
