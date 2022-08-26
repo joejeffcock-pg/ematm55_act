@@ -34,7 +34,7 @@ def load_mpose(dataset, split, verbose=False, data=None, frames=30):
     
     return dataset.get_data()
 
-def preprocess_data(X, y, augment=False, shuffle=False):
+def to_dataset(X, y, augment=False, shuffle=False):
     ds = tf.data.Dataset.from_tensor_slices((X, y))
     ds = ds.map(lambda x,y : one_hot(x,y,20), num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds = ds.cache()
@@ -79,15 +79,13 @@ def act_micro(frames=30):
     mlp_head_size = 256
     return build_act(n_heads, n_layers, dropout, mlp_head_size, frames)
 
-def n_sized_chunks(ary, n):
-    splits = [ary[i:i+n] for i in range(0, ary.shape[0]-n)]
-    if not len(splits[-1]) == n:
-        splits = splits[:-1]
-    return splits
+def sliding_window(array, size, stride):
+    windows = [array[i:i+size] for i in range(0, array.shape[0]-size, stride)]
+    return windows
 
-def stack_data(X, y, frames=30):
-    X = [n_sized_chunks(array[::30], frames) for X_subset in X for array in X_subset]
-    y = [n_sized_chunks(array[::30], frames) for y_subset in y for array in y_subset]
+def preprocess_data(X, y, frameskip=30, size=30, stride=1):
+    X = [sliding_window(array[::frameskip], size, stride) for X_actor in X for array in X_actor]
+    y = [sliding_window(array[::frameskip], size, stride) for y_actor in y for array in y_actor]
     y = [np.unique(chunk) for chunks in y for chunk in chunks]
     
     X = np.vstack(X)
@@ -109,16 +107,16 @@ if __name__ == "__main__":
         file_path = os.path.join(dir_path, file_name)
         dataset = np.load(file_path)
 
-        X_subset = []
-        y_subset = []
+        X_actor = []
+        y_actor = []
         for key in dataset:
             if key.startswith("X"):
-                X_subset.append(dataset[key])
+                X_actor.append(dataset[key])
             elif key.startswith("y"):
-                y_subset.append(dataset[key])
+                y_actor.append(dataset[key])
         
-        X.append(X_subset)
-        y.append(y_subset)
+        X.append(X_actor)
+        y.append(y_actor)
 
     X = np.array(X, dtype=object)
     y = np.array(y, dtype=object)
@@ -126,21 +124,24 @@ if __name__ == "__main__":
     kf = KFold(n_splits=6, shuffle=True, random_state=11331)
 
     for fold, (train_index, test_index) in enumerate(kf.split(X)):
-        X_train, y_train = stack_data(X[train_index], y[train_index], frames)
-        X_test, y_test = stack_data(X[test_index], y[test_index], frames)
-        data = (X_train, y_train, X_test, y_test)
+        X_train, y_train = X[train_index], y[train_index]
+        X_train, y_train = preprocess_data(X_train, y_train)
 
+        X_test, y_test = X[test_index], y[test_index]
+        X_test, y_test = preprocess_data(X_test, y_test)
+
+        data = (X_train, y_train, X_test, y_test)
         X_train, y_train, X_test, y_test = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
                                                         test_size=0.1,
                                                         shuffle=True)
         
-        ds_train = preprocess_data(X_train, y_train)
-        ds_val = preprocess_data(X_val, y_val)
-        ds_test = preprocess_data(X_test, y_test)
+        ds_train = to_dataset(X_train, y_train)
+        ds_val = to_dataset(X_val, y_val)
+        ds_test = to_dataset(X_test, y_test)
 
         # mpose hyperparams
-        epochs = 350
+        epochs = 50
         lr = CustomSchedule(64, 
             warmup_steps=len(ds_train)*epochs*0.3,
             decay_step=len(ds_train)*epochs*0.8)
@@ -156,7 +157,7 @@ if __name__ == "__main__":
         # training
         history = model.fit(
             ds_train,
-            epochs=50,
+            epochs=epochs,
             initial_epoch=0,
             validation_data=ds_val,
             # callbacks=[checkpointer],
