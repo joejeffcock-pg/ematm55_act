@@ -9,7 +9,7 @@ from utils.transformer import TransformerEncoder, PatchClassEmbedding
 from utils.data import random_flip, random_noise, one_hot
 from utils.tools import CustomSchedule
 
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import train_test_split, KFold
 
 def load_mpose(dataset, split, verbose=False, data=None, frames=30):
@@ -127,18 +127,12 @@ if __name__ == "__main__":
         X_train, y_train = X[train_index], y[train_index]
         X_train, y_train = preprocess_data(X_train, y_train)
 
-        X_test, y_test = X[test_index], y[test_index]
-        X_test, y_test = preprocess_data(X_test, y_test)
-
-        data = (X_train, y_train, X_test, y_test)
-        X_train, y_train, X_test, y_test = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
-                                                        test_size=0.1,
-                                                        shuffle=True)
+        data = (X_train, y_train, X_train, y_train)
+        X_train, y_train, _, _ = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, shuffle=True)
         
         ds_train = to_dataset(X_train, y_train)
         ds_val = to_dataset(X_val, y_val)
-        ds_test = to_dataset(X_test, y_test)
 
         # mpose hyperparams
         epochs = 50
@@ -165,15 +159,41 @@ if __name__ == "__main__":
         )
 
         # compute metrics
-        _, accuracy_test = model.evaluate(ds_test)
-        X_tf, y_tf = tuple(zip(*ds_test))
-        predictions = tf.nn.softmax(model.predict(tf.concat(X_tf, axis=0)), axis=-1)
-        y_pred = np.argmax(predictions, axis=1)
-        y_scores = np.amax(predictions, axis=1)
-        balanced_accuracy = balanced_accuracy_score(tf.math.argmax(tf.concat(y_tf, axis=0), axis=1), y_pred)
+        test_results = {}
+        weighted_accuracy = 0
+        weighted_balanced_accuracy = 0
 
-        text = f"Accuracy Test: {accuracy_test} <> Balanced Accuracy: {balanced_accuracy}\n"
+        for index in test_index:
+            print("Test actor: {}".format(index))
+
+            X_test, y_test = X[index], y[index]
+            X_test, y_test = preprocess_data([X_test], [y_test])
+            
+            data = (X_test, y_test, X_test, y_test)
+            X_test, y_test, _, _ = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
+
+            ds_test = to_dataset(X_test, y_test)
+            _, accuracy_test = model.evaluate(ds_test)
+            X_tf, y_tf = tuple(zip(*ds_test))
+            predictions = tf.nn.softmax(model.predict(tf.concat(X_tf, axis=0)), axis=-1)
+            y_pred = np.argmax(predictions, axis=1)
+
+            accuracy = accuracy_score(y_test, y_pred)
+            balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+            text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
+            print(text)
+
+            test_results["actor_{}_X_test".format(index)] = X_test
+            test_results["actor_{}_y_test".format(index)] = y_test
+            test_results["actor_{}_y_pred".format(index)] = y_pred
+        
+        print("Test fold: {} actors: {}".format(fold, test_index))
+        y_test = np.concatenate([test_results["actor_{}_y_test".format(index)] for index in test_index])
+        y_pred = np.concatenate([test_results["actor_{}_y_pred".format(index)] for index in test_index])
+        accuracy = accuracy_score(y_test, y_pred)
+        balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+        text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
         print(text)
 
-        # np.save("results/frameskip/y_test_{}.npy".format(fold), y_test)
-        # np.save("results/frameskip/y_pred_{}.npy".format(fold), y_pred)
+        test_results["indices"] = test_index
+        np.savez_compressed("results/actors/fold_{}.npz".format(fold), **test_results)
