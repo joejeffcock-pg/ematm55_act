@@ -36,7 +36,7 @@ def load_mpose(dataset, split, verbose=False, data=None, frames=30):
 
 def to_dataset(X, y, augment=False, shuffle=False):
     ds = tf.data.Dataset.from_tensor_slices((X, y))
-    ds = ds.map(lambda x,y : one_hot(x,y,20), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    # ds = ds.map(lambda x,y : one_hot(x,y,20), num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds = ds.cache()
     if augment:
         ds = ds.map(random_flip, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -69,7 +69,7 @@ def build_act(
     x = transformer(x)
     x = tf.keras.layers.Lambda(lambda x: x[:,0,:])(x)
     x = tf.keras.layers.Dense(mlp_head_size)(x)
-    outputs = tf.keras.layers.Dense(classes)(x)
+    outputs = tf.keras.layers.Dense(1)(x)
     return tf.keras.models.Model(inputs, outputs)
 
 def act_micro(frames=30):
@@ -84,12 +84,15 @@ def sliding_window(array, size, stride):
     return windows
 
 def preprocess_data(X, y, frameskip=30, size=30, stride=1):
+    map = np.array([1,0,2])
     X = [sliding_window(array[::frameskip], size, stride) for X_actor in X for array in X_actor]
     y = [sliding_window(array[::frameskip], size, stride) for y_actor in y for array in y_actor]
     y = [np.unique(chunk) for chunks in y for chunk in chunks]
     
     X = np.vstack(X)
     y = np.hstack(y)
+
+    y = map[y]
     return X, y
 
 
@@ -135,17 +138,17 @@ if __name__ == "__main__":
         ds_val = to_dataset(X_val, y_val)
 
         # mpose hyperparams
-        epochs = 50
+        epochs = 70
         lr = CustomSchedule(64, 
-            warmup_steps=len(ds_train)*epochs*0.3,
-            decay_step=len(ds_train)*epochs*0.8)
+            warmup_steps=len(ds_train)*350*0.3,
+            decay_step=len(ds_train)*350*0.8)
         weight_decay=1e-4
 
         # create model
         model = act_micro(frames=frames)
         optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=weight_decay)
-        loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
-        metrics = [tf.keras.metrics.CategoricalAccuracy(name="accuracy")]
+        loss = tf.keras.losses.MeanSquaredError()
+        metrics = [tf.keras.metrics.MeanSquaredError(name="MSE")]
         model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
         # training
@@ -175,11 +178,13 @@ if __name__ == "__main__":
             ds_test = to_dataset(X_test, y_test)
             _, accuracy_test = model.evaluate(ds_test)
             X_tf, y_tf = tuple(zip(*ds_test))
-            predictions = tf.nn.softmax(model.predict(tf.concat(X_tf, axis=0)), axis=-1)
-            y_pred = np.argmax(predictions, axis=1)
+            predictions = model.predict(tf.concat(X_tf, axis=0))
+            # y_pred = np.argmax(predictions, axis=1)
+            y_pred = np.array(predictions).flatten()
+            print(y_pred[:10], np.rint(y_pred)[:10], y_test[:10])
 
-            accuracy = accuracy_score(y_test, y_pred)
-            balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+            accuracy = accuracy_score(y_test, np.rint(y_pred))
+            balanced_accuracy = balanced_accuracy_score(y_test, np.rint(y_pred))
             text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
             print(text)
 
@@ -190,10 +195,10 @@ if __name__ == "__main__":
         print("Test fold: {} actors: {}".format(fold, test_index))
         y_test = np.concatenate([test_results["actor_{}_y_test".format(index)] for index in test_index])
         y_pred = np.concatenate([test_results["actor_{}_y_pred".format(index)] for index in test_index])
-        accuracy = accuracy_score(y_test, y_pred)
-        balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+        accuracy = accuracy_score(y_test, np.rint(y_pred))
+        balanced_accuracy = balanced_accuracy_score(y_test, np.rint(y_pred))
         text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
         print(text)
 
         test_results["indices"] = test_index
-        np.savez_compressed("results/actors/fold_{}.npz".format(fold), **test_results)
+        np.savez_compressed("results/mse/fold_{}.npz".format(fold), **test_results)
