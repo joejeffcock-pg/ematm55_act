@@ -1,3 +1,4 @@
+from email.policy import default
 import tensorflow as tf
 import tensorflow_addons as tfa
 import numpy as np
@@ -11,6 +12,10 @@ from utils.tools import CustomSchedule
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import train_test_split, KFold
+
+from itertools import product
+from collections import defaultdict
+import pickle
 
 def load_mpose(dataset, split, verbose=False, data=None, frames=30):
     dataset = MPOSE(pose_extractor=dataset, 
@@ -122,78 +127,108 @@ if __name__ == "__main__":
     y = np.array(y, dtype=object)
     frames = 30
     kf = KFold(n_splits=6, shuffle=True, random_state=11331)
+    seeds = [42344, 24234, 65747, 84443, 29345, 99543]
 
-    for fold, (train_index, test_index) in enumerate(kf.split(X)):
-        X_train, y_train = X[train_index], y[train_index]
-        X_train, y_train = preprocess_data(X_train, y_train)
+    frameskips = [75, 60, 45, 30, 15, 5, 1]
+    strides = [1, 5, 15, 30, 45]
+    params = product(strides, frameskips)
 
-        data = (X_train, y_train, X_train, y_train)
-        X_train, y_train, _, _ = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, shuffle=True)
+    grid_search_results = defaultdict(list)
+
+    for stride, frameskip in params:
+        # any lower and my machine is OOM
+        if frameskip * stride < 4:
+            continue
+        print(frameskip, stride)
         
-        ds_train = to_dataset(X_train, y_train)
-        ds_val = to_dataset(X_val, y_val)
+        for fold, (train_index, test_index) in enumerate(kf.split(X)):
+            tf.keras.backend.clear_session()
 
-        # mpose hyperparams
-        epochs = 50
-        lr = CustomSchedule(64, 
-            warmup_steps=len(ds_train)*epochs*0.3,
-            decay_step=len(ds_train)*epochs*0.8)
-        weight_decay=1e-4
+            X_train, y_train = X[train_index], y[train_index]
+            X_train, y_train = preprocess_data(X_train, y_train, frameskip=frameskip, stride=stride)
 
-        # create model
-        model = act_micro(frames=frames)
-        optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=weight_decay)
-        loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
-        metrics = [tf.keras.metrics.CategoricalAccuracy(name="accuracy")]
-        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-
-        # training
-        history = model.fit(
-            ds_train,
-            epochs=epochs,
-            initial_epoch=0,
-            validation_data=ds_val,
-            # callbacks=[checkpointer],
-            verbose=1
-        )
-
-        # compute metrics
-        test_results = {}
-        weighted_accuracy = 0
-        weighted_balanced_accuracy = 0
-
-        for index in test_index:
-            print("Test actor: {}".format(index))
-
-            X_test, y_test = X[index], y[index]
-            X_test, y_test = preprocess_data([X_test], [y_test])
+            data = (X_train, y_train, X_train, y_train)
+            X_train, y_train, _, _ = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
+            X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, shuffle=True, random_state=seeds[fold])
             
-            data = (X_test, y_test, X_test, y_test)
-            X_test, y_test, _, _ = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
+            ds_train = to_dataset(X_train, y_train)
+            ds_val = to_dataset(X_val, y_val)
 
-            ds_test = to_dataset(X_test, y_test)
-            _, accuracy_test = model.evaluate(ds_test)
-            X_tf, y_tf = tuple(zip(*ds_test))
-            predictions = tf.nn.softmax(model.predict(tf.concat(X_tf, axis=0)), axis=-1)
-            y_pred = np.argmax(predictions, axis=1)
+            # mpose hyperparams
+            epochs = 350
+            lr = CustomSchedule(64,
+                warmup_steps=len(ds_train)*epochs*0.3,
+                decay_step=len(ds_train)*epochs*0.8)
+            weight_decay=1e-4
 
+            # early stopping
+            callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=15, restore_best_weights=True)
+
+            # create model
+            model = act_micro(frames=frames)
+            optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=weight_decay)
+            loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
+            metrics = [tf.keras.metrics.CategoricalAccuracy(name="accuracy")]
+            model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+
+            # training
+            history = model.fit(
+                ds_train,
+                epochs=epochs,
+                initial_epoch=0,
+                validation_data=ds_val,
+                callbacks=[callback],
+                verbose=0,
+            )
+
+            # compute metrics
+            test_results = {}
+            weighted_accuracy = 0
+            weighted_balanced_accuracy = 0
+
+            for index in test_index:
+                # print("Test actor: {}".format(index))
+
+                X_test, y_test = X[index], y[index]
+                X_test, y_test = preprocess_data([X_test], [y_test], frameskip=frameskip, stride=stride)
+                
+                data = (X_test, y_test, X_test, y_test)
+                X_test, y_test, _, _ = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
+
+                ds_test = to_dataset(X_test, y_test)
+                _, accuracy_test = model.evaluate(ds_test, verbose=0)
+                X_tf, y_tf = tuple(zip(*ds_test))
+                predictions = tf.nn.softmax(model.predict(tf.concat(X_tf, axis=0)), axis=-1)
+                y_pred = np.argmax(predictions, axis=1)
+
+                accuracy = accuracy_score(y_test, y_pred)
+                balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+                # text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
+                # print(text)
+
+                test_results["actor_{}_X_test".format(index)] = X_test
+                test_results["actor_{}_y_test".format(index)] = y_test
+                test_results["actor_{}_y_pred".format(index)] = y_pred
+            
+            print("Test fold: {} actors: {}".format(fold, test_index))
+            y_test = np.concatenate([test_results["actor_{}_y_test".format(index)] for index in test_index])
+            y_pred = np.concatenate([test_results["actor_{}_y_pred".format(index)] for index in test_index])
             accuracy = accuracy_score(y_test, y_pred)
             balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
             text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
             print(text)
 
-            test_results["actor_{}_X_test".format(index)] = X_test
-            test_results["actor_{}_y_test".format(index)] = y_test
-            test_results["actor_{}_y_pred".format(index)] = y_pred
-        
-        print("Test fold: {} actors: {}".format(fold, test_index))
-        y_test = np.concatenate([test_results["actor_{}_y_test".format(index)] for index in test_index])
-        y_pred = np.concatenate([test_results["actor_{}_y_pred".format(index)] for index in test_index])
-        accuracy = accuracy_score(y_test, y_pred)
-        balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
-        text = f"Accuracy Test: {accuracy} <> Balanced Accuracy: {balanced_accuracy}\n"
-        print(text)
+            test_results["indices"] = test_index
+            # np.savez_compressed("results/actors/fold_{}.npz".format(fold), **test_results)
 
-        test_results["indices"] = test_index
-        np.savez_compressed("results/actors/fold_{}.npz".format(fold), **test_results)
+            grid_search_results["fold{}_accuracy".format(fold)].append(accuracy)
+            grid_search_results["fold{}_balanced_accuracy".format(fold)].append(balanced_accuracy)
+            grid_search_results["fold{}_epochs".format(fold)].append(len(history.history['loss']))
+        
+        grid_search_results["params"].append({"frameskip":frameskip, "stride":stride})
+        grid_search_results["mean_accuracy"].append(np.mean([grid_search_results["fold{}_accuracy".format(fold)][-1] for fold in range(6)]))
+        grid_search_results["mean_balanced_accuracy"].append(np.mean([grid_search_results["fold{}_balanced_accuracy".format(fold)][-1] for fold in range(6)]))
+    
+        # save results to file
+        with open("grid_search_results.pkl", "wb") as f:
+            pickle.dump(grid_search_results, f)
