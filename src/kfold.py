@@ -129,8 +129,8 @@ if __name__ == "__main__":
     kf = KFold(n_splits=6, shuffle=True, random_state=11331)
     seeds = [42344, 24234, 65747, 84443, 29345, 99543]
 
-    frameskips = [75, 60, 45, 30, 15, 5, 1]
-    strides = [1, 5, 15, 30, 45]
+    frameskips = [30]
+    strides = [1]
     params = product(strides, frameskips)
 
     grid_search_results = defaultdict(list)
@@ -162,7 +162,7 @@ if __name__ == "__main__":
             weight_decay=1e-4
 
             # early stopping
-            callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=15, restore_best_weights=True)
+            callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5, restore_best_weights=True)
 
             # create model
             model = act_micro(frames=frames)
@@ -170,6 +170,11 @@ if __name__ == "__main__":
             loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
             metrics = [tf.keras.metrics.CategoricalAccuracy(name="accuracy")]
             model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+            model.load_weights("act_mpose_model.h5")
+            print(model.layers)
+            for layer in model.layers[:-2]:
+                layer.trainable = False
+            model.layers[-1].trainable = True
 
             # training
             history = model.fit(
@@ -230,5 +235,5 @@ if __name__ == "__main__":
         grid_search_results["mean_balanced_accuracy"].append(np.mean([grid_search_results["fold{}_balanced_accuracy".format(fold)][-1] for fold in range(6)]))
     
         # save results to file
-        with open("grid_search_results.pkl", "wb") as f:
+        with open("grid_search_pretrained.pkl", "wb") as f:
             pickle.dump(grid_search_results, f)

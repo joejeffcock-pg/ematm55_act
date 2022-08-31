@@ -100,10 +100,11 @@ if __name__ == "__main__":
         y_test = np.load("/home/jeff/.mpose/openpose/{}/y_test.npy".format(split))
         data = (X_train, y_train, X_test, y_test)
 
-        X_train, y_train, X_test, y_test = load_mpose('openpose', 1, verbose=False, data=data, frames=frames)
+        X_train, y_train, X_test, y_test = load_mpose('openpose', split, verbose=False, data=data, frames=frames)
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train,
                                                         test_size=0.1,
-                                                        shuffle=False)
+                                                        shuffle=True,
+                                                        random_state=11331)
         
         ds_train, ds_val, ds_test = preprocess_data(X_train, y_train, X_val, y_val, X_test, y_test)
 
@@ -141,6 +142,8 @@ if __name__ == "__main__":
 
         text = f"Accuracy Test: {accuracy_test} <> Balanced Accuracy: {balanced_accuracy}\n"
         print(text)
+
+        model.save_weights('act_mpose_model.h5')
 
         # # qualitative results
         # import cv2
